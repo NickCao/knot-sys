@@ -20,6 +20,7 @@
           buildInputs = [
             knot-dns
           ];
+          RUSTC_BOOTSTRAP = 1;
         };
       });
 }

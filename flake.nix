@@ -15,12 +15,10 @@
             rust-analyzer
             rustfmt
             clippy
-            clang-tools
           ];
           buildInputs = [
             knot-dns
           ];
-          RUSTC_BOOTSTRAP = 1;
         };
       });
 }

@@ -1,51 +1,20 @@
 #![allow(non_upper_case_globals)]
 use knot_sys::*;
-use nom::character::complete::*;
-use nom::multi::fold_many1;
-use nom::sequence::pair;
 use std::collections::HashMap;
 use std::ffi::{CStr, CString};
 
 fn parse_bool(value: &str) -> i64 {
-    match value {
-        "yes" | "freezing" | "open" => 1,
-        "no" | "thawing" | "none" => 0,
-        _ => -1,
+    match knot_bool_parse(value) {
+        Some(true) => 1,
+        Some(false) => 0,
+        None => -1,
     }
 }
 
-fn parse_event(event: &str) -> i64 {
-    match event {
-        "running" => -1,
-        "not scheduled" => -1,
-        "frozen" => -1,
-        "pending" => -1,
-        "0" => 0,
-        _ => {
-            let res = pair::<_, _, _, (), _, _>(
-                char('+'), // do not support events in the past
-                fold_many1(
-                    pair(u64, alpha1),
-                    || 0u64,
-                    |acc, item| {
-                        let scale = match item.1 {
-                            "Y" => 3600 * 24 * 365,
-                            "M" => 3600 * 24 * 30,
-                            "D" => 3600 * 24,
-                            "h" => 3600,
-                            "m" => 60,
-                            "s" => 1,
-                            _ => 0,
-                        };
-                        acc + scale * item.0
-                    },
-                ),
-            )(event);
-            match res {
-                Ok(res) => res.1 .1 as i64,
-                Err(_) => -1,
-            }
-        }
+fn parse_event(value: &str) -> i64 {
+    match knot_time_parse(value) {
+        Some(time) => time as i64,
+        None => -1,
     }
 }
 
@@ -68,7 +37,7 @@ fn main() {
             &mut data as &mut knot_ctl_data_t,
         );
         if code != knot_error_KNOT_EOK {
-            eprintln!("1: {:?}", CStr::from_ptr(knot_strerror(code)));
+            eprintln!("{:?}", CStr::from_ptr(knot_strerror(code)));
         }
 
         let code = knot_ctl_send(
@@ -77,7 +46,7 @@ fn main() {
             0 as *mut knot_ctl_data_t,
         );
         if code != knot_error_KNOT_EOK {
-            eprintln!("2: {:?}", CStr::from_ptr(knot_strerror(code)));
+            eprintln!("{:?}", CStr::from_ptr(knot_strerror(code)));
         }
 
         let registry = prometheus::Registry::new();
@@ -91,7 +60,7 @@ fn main() {
                 data.as_mut_ptr() as *mut knot_ctl_data_t,
             );
             if code != knot_error_KNOT_EOK {
-                eprintln!("3: {:?}", CStr::from_ptr(knot_strerror(code)));
+                eprintln!("{:?}", CStr::from_ptr(knot_strerror(code)));
             }
 
             match data_type {

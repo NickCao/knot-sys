@@ -1,13 +1,53 @@
-#![allow(non_upper_case_globals)]
-#![allow(non_camel_case_types)]
-#![allow(improper_ctypes)]
-#![allow(non_snake_case)]
-#![allow(dead_code)]
-include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
+pub mod bindings;
 
+use crate::bindings::*;
 use nom::character::complete::{alpha1, char, u64};
 use nom::multi::fold_many1;
 use nom::sequence::pair;
+use std::ffi::{CStr, CString, NulError};
+use std::os::raw::c_int;
+use thiserror::Error;
+
+pub struct Ctx {
+    ctx: *mut knot_ctl_t,
+}
+
+pub type KnotResult<T> = Result<T, KnotError>;
+
+#[derive(Error, Debug)]
+pub enum KnotError {
+    #[error("libknot error")]
+    C(&'static CStr),
+    #[error("null error")]
+    Nul(#[from] NulError),
+}
+
+fn knot_result(value: c_int) -> KnotResult<()> {
+    match value {
+        bindings::knot_error_KNOT_EOK => Ok(()),
+        _ => Err(unsafe { KnotError::C(CStr::from_ptr(bindings::knot_strerror(value))) }),
+    }
+}
+
+impl Ctx {
+    pub fn connect(path: &str) -> KnotResult<Self> {
+        unsafe {
+            let ctx = knot_ctl_alloc();
+            let path = CString::new(path)?;
+            knot_result(knot_ctl_connect(ctx, path.as_ptr()))?;
+            Ok(Self { ctx })
+        }
+    }
+}
+
+impl Drop for Ctx {
+    fn drop(&mut self) {
+        unsafe {
+            knot_ctl_close(self.ctx);
+            knot_ctl_free(self.ctx);
+        }
+    }
+}
 
 pub fn knot_bool_parse(value: &str) -> Option<bool> {
     match value {

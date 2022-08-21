@@ -1,4 +1,5 @@
 #![allow(non_upper_case_globals)]
+use knot_sys::bindings::*;
 use knot_sys::*;
 use std::collections::HashMap;
 use std::ffi::{CStr, CString};

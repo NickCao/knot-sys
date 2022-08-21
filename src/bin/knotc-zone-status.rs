@@ -4,19 +4,17 @@ use knot_sys::*;
 use std::collections::HashMap;
 use std::ffi::CString;
 
-fn parse_bool(value: &str) -> i64 {
-    match knot_bool_parse(value) {
-        Some(true) => 1,
-        Some(false) => 0,
-        None => -1,
+fn parse(value: &str) -> i64 {
+    if let Ok(value) = value.parse() {
+        return value;
     }
-}
-
-fn parse_event(value: &str) -> i64 {
-    match knot_time_parse(value) {
-        Some(time) => time as i64,
-        None => -1,
+    if let Some(value) = knot_bool_parse(value) {
+        return if value { 1 } else { 0 };
     }
+    if let Some(value) = knot_time_parse(value) {
+        return value as i64;
+    }
+    -1
 }
 
 fn main() {
@@ -60,21 +58,21 @@ fn main() {
                     .to_owned();
 
                 let (name, value) = match label.as_str() {
-                    "serial" => ("serial", value.parse::<i64>().unwrap()),
-                    "refresh" => ("refresh", parse_event(&value)),
-                    "load" => ("load", parse_event(&value)),
-                    "update" => ("update", parse_event(&value)),
-                    "notify" => ("notify", parse_event(&value)),
-                    "journal flush" => ("journal_flush", parse_event(&value)),
-                    "DNSSEC re-sign" => ("dnssec_resign", parse_event(&value)),
-                    "backup/restore" => ("backup_restore", parse_event(&value)),
-                    "expiration" => ("expiration", parse_event(&value)),
-                    "NSEC3 resalt" => ("nsec3_resalt", parse_event(&value)),
-                    "DS check" => ("ds_check", parse_event(&value)),
-                    "DS push" => ("ds_push", parse_event(&value)),
-                    "XFR freeze" => ("xfr_freeze", parse_bool(&value)),
-                    "freeze" => ("freeze", parse_bool(&value)),
-                    "transaction" => ("transaction", parse_bool(&value)),
+                    "serial" => ("serial", parse(&value)),
+                    "refresh" => ("refresh", parse(&value)),
+                    "load" => ("load", parse(&value)),
+                    "update" => ("update", parse(&value)),
+                    "notify" => ("notify", parse(&value)),
+                    "journal flush" => ("journal_flush", parse(&value)),
+                    "DNSSEC re-sign" => ("dnssec_resign", parse(&value)),
+                    "backup/restore" => ("backup_restore", parse(&value)),
+                    "expiration" => ("expiration", parse(&value)),
+                    "NSEC3 resalt" => ("nsec3_resalt", parse(&value)),
+                    "DS check" => ("ds_check", parse(&value)),
+                    "DS push" => ("ds_push", parse(&value)),
+                    "XFR freeze" => ("xfr_freeze", parse(&value)),
+                    "freeze" => ("freeze", parse(&value)),
+                    "transaction" => ("transaction", parse(&value)),
                     _ => continue,
                 };
 

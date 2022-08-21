@@ -24,7 +24,7 @@ fn main() {
     ctx.connect("/run/knot/knot.sock").unwrap();
     ctx.send(
         KnotCtlType::DATA,
-        Some(&HashMap::from([(
+        Some(&KnotCtlData::from([(
             KnotCtlIdx::CMD,
             CString::new("zone-status").unwrap(),
         )])),

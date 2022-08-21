@@ -56,7 +56,7 @@ pub enum KnotCtlIdx {
     ZONE = knot_ctl_idx_t_KNOT_CTL_IDX_ZONE,
 }
 
-type KnotCtlData = HashMap<KnotCtlIdx, CString>;
+pub type KnotCtlData = HashMap<KnotCtlIdx, CString>;
 
 impl KnotCtx {
     pub fn new() -> Self {
@@ -79,12 +79,12 @@ impl KnotCtx {
     }
     pub fn send(&self, r#type: KnotCtlType, data: Option<&KnotCtlData>) -> KnotResult<()> {
         let data = data.map(|data| {
-                let mut packet = unsafe { std::mem::zeroed::<knot_ctl_data_t>() };
-                data.iter().for_each(|(&k, v)| {
-                    packet[k as usize] = v.as_ptr();
-                });
-                packet
+            let mut packet = unsafe { std::mem::zeroed::<knot_ctl_data_t>() };
+            data.iter().for_each(|(&k, v)| {
+                packet[k as usize] = v.as_ptr();
             });
+            packet
+        });
         unsafe {
             knot_result(knot_ctl_send(
                 self.ctx,

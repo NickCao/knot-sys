@@ -40,46 +40,37 @@ fn main() {
     let registry = prometheus::Registry::new();
 
     loop {
-        let (data_type, data) = ctx.recv().unwrap();
+        let (data_type, mut data) = ctx.recv().unwrap();
 
         match data_type {
             KnotCtlType::BLOCK => break,
             KnotCtlType::DATA | KnotCtlType::EXTRA => {
                 let zone = data
-                    .get(&KnotCtlIdx::ZONE)
+                    .remove(&KnotCtlIdx::ZONE)
                     .unwrap()
-                    .to_str()
-                    .unwrap()
-                    .to_owned();
+                    .into_string()
+                    .unwrap();
                 let label = data
-                    .get(&KnotCtlIdx::TYPE)
+                    .remove(&KnotCtlIdx::TYPE)
                     .unwrap()
-                    .to_str()
-                    .unwrap()
-                    .to_owned();
+                    .into_string()
+                    .unwrap();
                 let value = data
-                    .get(&KnotCtlIdx::DATA)
+                    .remove(&KnotCtlIdx::DATA)
                     .unwrap()
-                    .to_str()
-                    .unwrap()
-                    .to_owned();
-
-                let name = normalize(&label);
-                let value = parse(&value);
-
-                let mut labels = HashMap::new();
-                labels.insert("zone".to_string(), zone);
+                    .into_string()
+                    .unwrap();
 
                 let gauge = prometheus::IntGauge::with_opts(prometheus::Opts {
                     namespace: "knot".to_string(),
                     subsystem: "dns".to_string(),
-                    name: name.to_string(),
+                    name: normalize(&label),
                     help: label,
-                    const_labels: labels,
+                    const_labels: HashMap::from([("zone".to_string(), zone)]),
                     variable_labels: vec![],
                 })
                 .unwrap();
-                gauge.set(value);
+                gauge.set(parse(&value));
 
                 registry.register(Box::new(gauge)).unwrap();
             }

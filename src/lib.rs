@@ -29,6 +29,14 @@ fn knot_result(value: c_int) -> KnotResult<()> {
     }
 }
 
+#[repr(u32)]
+pub enum KnotCtlType {
+    END = knot_ctl_type_t_KNOT_CTL_TYPE_END,
+    DATA = knot_ctl_type_t_KNOT_CTL_TYPE_DATA,
+    EXTRA = knot_ctl_type_t_KNOT_CTL_TYPE_EXTRA,
+    BLOCK = knot_ctl_type_t_KNOT_CTL_TYPE_BLOCK,
+}
+
 impl KnotCtx {
     pub fn new() -> Self {
         unsafe {
@@ -48,11 +56,20 @@ impl KnotCtx {
             knot_ctl_close(self.ctx);
         }
     }
-    pub fn send(&self, r#type: knot_ctl_type_t, data: *mut knot_ctl_data_t) -> KnotResult<()> {
-        unsafe { knot_result(knot_ctl_send(self.ctx, r#type, data)) }
+    pub fn send(&self, r#type: KnotCtlType, data: *mut knot_ctl_data_t) -> KnotResult<()> {
+        unsafe { knot_result(knot_ctl_send(self.ctx, r#type as knot_ctl_type_t, data)) }
     }
-    pub fn recv(&self, r#type: &mut knot_ctl_type_t, data: *mut knot_ctl_data_t) -> KnotResult<()> {
-        unsafe { knot_result(knot_ctl_receive(self.ctx, r#type, data)) }
+    pub fn recv(&self) -> KnotResult<(KnotCtlType, knot_ctl_data_t)> {
+        let mut r#type = std::mem::MaybeUninit::<knot_ctl_type_t>::uninit();
+        let mut data = std::mem::MaybeUninit::<knot_ctl_data_t>::uninit();
+        unsafe {
+            knot_result(knot_ctl_receive(
+                self.ctx,
+                r#type.as_mut_ptr(),
+                data.as_mut_ptr(),
+            ))
+        }?;
+        unsafe { Ok((std::mem::transmute(r#type), data.assume_init())) }
     }
 }
 

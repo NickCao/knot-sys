@@ -27,24 +27,18 @@ fn main() {
         let mut data: knot_ctl_data_t = std::mem::zeroed();
         let cmd = CString::new("zone-status").unwrap();
         data[knot_ctl_idx_t_KNOT_CTL_IDX_CMD as usize] = cmd.as_ptr();
-        ctx.send(knot_ctl_type_t_KNOT_CTL_TYPE_DATA, &mut data)
+        ctx.send(KnotCtlType::DATA, &mut data).unwrap();
+        ctx.send(KnotCtlType::BLOCK, 0 as *mut knot_ctl_data_t)
             .unwrap();
-        ctx.send(
-            knot_ctl_type_t_KNOT_CTL_TYPE_BLOCK,
-            0 as *mut knot_ctl_data_t,
-        )
-        .unwrap();
 
         let registry = prometheus::Registry::new();
 
         loop {
-            let mut data: knot_ctl_data_t = std::mem::zeroed();
-            let mut data_type: knot_ctl_type_t = std::mem::zeroed();
-            ctx.recv(&mut data_type, &mut data).unwrap();
+            let (data_type, data) = ctx.recv().unwrap();
 
             match data_type {
-                knot_ctl_type_t_KNOT_CTL_TYPE_BLOCK => break,
-                knot_ctl_type_t_KNOT_CTL_TYPE_DATA | knot_ctl_type_t_KNOT_CTL_TYPE_EXTRA => {
+                KnotCtlType::BLOCK => break,
+                KnotCtlType::DATA | KnotCtlType::EXTRA => {
                     let zone = data[knot_ctl_idx_t_KNOT_CTL_IDX_ZONE as usize];
                     let label = data[knot_ctl_idx_t_KNOT_CTL_IDX_TYPE as usize];
                     let value = data[knot_ctl_idx_t_KNOT_CTL_IDX_DATA as usize];

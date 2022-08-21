@@ -78,28 +78,25 @@ impl KnotCtx {
         }
     }
     pub fn send(&self, r#type: KnotCtlType, data: Option<&KnotCtlData>) -> KnotResult<()> {
-        let data = match data {
-            Some(data) => Some({
+        let data = data.map(|data| {
                 let mut packet = unsafe { std::mem::zeroed::<knot_ctl_data_t>() };
                 data.iter().for_each(|(&k, v)| {
                     packet[k as usize] = v.as_ptr();
                 });
                 packet
-            }),
-            None => None,
-        };
+            });
         unsafe {
             knot_result(knot_ctl_send(
                 self.ctx,
                 r#type as knot_ctl_type_t,
                 match data {
                     Some(mut data) => data.as_mut_ptr() as *mut knot_ctl_data_t,
-                    None => 0 as *mut knot_ctl_data_t,
+                    None => std::ptr::null_mut::<knot_ctl_data_t>(),
                 },
             ))
         }
     }
-    pub fn recv(&self) -> KnotResult<(KnotCtlType, knot_ctl_data_t)> {
+    pub fn recv(&self) -> KnotResult<(KnotCtlType, KnotCtlData)> {
         let mut r#type = std::mem::MaybeUninit::<knot_ctl_type_t>::uninit();
         let mut data = std::mem::MaybeUninit::<knot_ctl_data_t>::uninit();
         unsafe {
@@ -109,7 +106,21 @@ impl KnotCtx {
                 data.as_mut_ptr(),
             ))
         }?;
-        unsafe { Ok((std::mem::transmute(r#type), data.assume_init())) }
+        unsafe {
+            let data = data
+                .assume_init_read()
+                .iter()
+                .enumerate()
+                .filter_map(|(i, &ptr)| match ptr as usize {
+                    0 => None,
+                    _ => Some((
+                        std::mem::transmute(i as knot_ctl_idx_t),
+                        CStr::from_ptr(ptr).to_owned(),
+                    )),
+                })
+                .collect();
+            Ok((std::mem::transmute(r#type), data))
+        }
     }
 }
 

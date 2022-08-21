@@ -23,13 +23,15 @@ fn main() {
     unsafe {
         let ctx = KnotCtx::new();
         ctx.connect("/run/knot/knot.sock").unwrap();
-
-        let mut data: knot_ctl_data_t = std::mem::zeroed();
-        let cmd = CString::new("zone-status").unwrap();
-        data[knot_ctl_idx_t_KNOT_CTL_IDX_CMD as usize] = cmd.as_ptr();
-        ctx.send(KnotCtlType::DATA, &mut data).unwrap();
-        ctx.send(KnotCtlType::BLOCK, 0 as *mut knot_ctl_data_t)
-            .unwrap();
+        ctx.send(
+            KnotCtlType::DATA,
+            Some(&HashMap::from([(
+                KnotCtlIdx::CMD,
+                CString::new("zone-status").unwrap(),
+            )])),
+        )
+        .unwrap();
+        ctx.send(KnotCtlType::BLOCK, None).unwrap();
 
         let registry = prometheus::Registry::new();
 

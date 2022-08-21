@@ -4,6 +4,7 @@ use crate::bindings::*;
 use nom::character::complete::{alpha1, char, u64};
 use nom::multi::fold_many1;
 use nom::sequence::pair;
+use std::collections::HashMap;
 use std::ffi::{CStr, CString, NulError};
 use std::os::raw::c_int;
 use thiserror::Error;
@@ -30,12 +31,32 @@ fn knot_result(value: c_int) -> KnotResult<()> {
 }
 
 #[repr(u32)]
+#[derive(Copy, Clone)]
 pub enum KnotCtlType {
     END = knot_ctl_type_t_KNOT_CTL_TYPE_END,
     DATA = knot_ctl_type_t_KNOT_CTL_TYPE_DATA,
     EXTRA = knot_ctl_type_t_KNOT_CTL_TYPE_EXTRA,
     BLOCK = knot_ctl_type_t_KNOT_CTL_TYPE_BLOCK,
 }
+
+#[repr(u32)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
+pub enum KnotCtlIdx {
+    CMD = knot_ctl_idx_t_KNOT_CTL_IDX_CMD,
+    DATA = knot_ctl_idx_t_KNOT_CTL_IDX_DATA,
+    ERROR = knot_ctl_idx_t_KNOT_CTL_IDX_ERROR,
+    FILTER = knot_ctl_idx_t_KNOT_CTL_IDX_FILTER,
+    FLAGS = knot_ctl_idx_t_KNOT_CTL_IDX_FLAGS,
+    ID = knot_ctl_idx_t_KNOT_CTL_IDX_ID,
+    ITEM = knot_ctl_idx_t_KNOT_CTL_IDX_ITEM,
+    OWNER = knot_ctl_idx_t_KNOT_CTL_IDX_OWNER,
+    SECTION = knot_ctl_idx_t_KNOT_CTL_IDX_SECTION,
+    TTL = knot_ctl_idx_t_KNOT_CTL_IDX_TTL,
+    TYPE = knot_ctl_idx_t_KNOT_CTL_IDX_TYPE,
+    ZONE = knot_ctl_idx_t_KNOT_CTL_IDX_ZONE,
+}
+
+type KnotCtlData = HashMap<KnotCtlIdx, CString>;
 
 impl KnotCtx {
     pub fn new() -> Self {
@@ -56,8 +77,27 @@ impl KnotCtx {
             knot_ctl_close(self.ctx);
         }
     }
-    pub fn send(&self, r#type: KnotCtlType, data: *mut knot_ctl_data_t) -> KnotResult<()> {
-        unsafe { knot_result(knot_ctl_send(self.ctx, r#type as knot_ctl_type_t, data)) }
+    pub fn send(&self, r#type: KnotCtlType, data: Option<&KnotCtlData>) -> KnotResult<()> {
+        let data = match data {
+            Some(data) => Some({
+                let mut packet = unsafe { std::mem::zeroed::<knot_ctl_data_t>() };
+                data.iter().for_each(|(&k, v)| {
+                    packet[k as usize] = v.as_ptr();
+                });
+                packet
+            }),
+            None => None,
+        };
+        unsafe {
+            knot_result(knot_ctl_send(
+                self.ctx,
+                r#type as knot_ctl_type_t,
+                match data {
+                    Some(mut data) => data.as_mut_ptr() as *mut knot_ctl_data_t,
+                    None => 0 as *mut knot_ctl_data_t,
+                },
+            ))
+        }
     }
     pub fn recv(&self) -> KnotResult<(KnotCtlType, knot_ctl_data_t)> {
         let mut r#type = std::mem::MaybeUninit::<knot_ctl_type_t>::uninit();

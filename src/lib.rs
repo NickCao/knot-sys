@@ -79,7 +79,7 @@ impl KnotCtx {
     }
     pub fn send(&self, r#type: KnotCtlType, data: Option<&KnotCtlData>) -> KnotResult<()> {
         let data = data.map(|data| {
-            let mut packet = unsafe { std::mem::zeroed::<knot_ctl_data_t>() };
+            let mut packet = [std::ptr::null(); knot_ctl_idx_t_KNOT_CTL_IDX__COUNT as usize];
             data.iter().for_each(|(&k, v)| {
                 packet[k as usize] = v.as_ptr();
             });

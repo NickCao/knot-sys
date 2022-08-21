@@ -4,6 +4,13 @@ use knot_sys::*;
 use std::collections::HashMap;
 use std::ffi::CString;
 
+fn normalize(key: &str) -> String {
+    key.to_lowercase()
+        .replace(" ", "_")
+        .replace("/", "_")
+        .replace("-", "_")
+}
+
 fn parse(value: &str) -> i64 {
     if let Ok(value) = value.parse() {
         return value;
@@ -57,24 +64,8 @@ fn main() {
                     .unwrap()
                     .to_owned();
 
-                let (name, value) = match label.as_str() {
-                    "serial" => ("serial", parse(&value)),
-                    "refresh" => ("refresh", parse(&value)),
-                    "load" => ("load", parse(&value)),
-                    "update" => ("update", parse(&value)),
-                    "notify" => ("notify", parse(&value)),
-                    "journal flush" => ("journal_flush", parse(&value)),
-                    "DNSSEC re-sign" => ("dnssec_resign", parse(&value)),
-                    "backup/restore" => ("backup_restore", parse(&value)),
-                    "expiration" => ("expiration", parse(&value)),
-                    "NSEC3 resalt" => ("nsec3_resalt", parse(&value)),
-                    "DS check" => ("ds_check", parse(&value)),
-                    "DS push" => ("ds_push", parse(&value)),
-                    "XFR freeze" => ("xfr_freeze", parse(&value)),
-                    "freeze" => ("freeze", parse(&value)),
-                    "transaction" => ("transaction", parse(&value)),
-                    _ => continue,
-                };
+                let name = normalize(&label);
+                let value = parse(&value);
 
                 let mut labels = HashMap::new();
                 labels.insert("zone".to_string(), zone);

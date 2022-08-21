@@ -21,48 +21,26 @@ fn parse_event(value: &str) -> i64 {
 
 fn main() {
     unsafe {
-        let ctx = knot_ctl_alloc();
-
-        let path = CString::new("/run/knot/knot.sock").unwrap();
-        let code = knot_ctl_connect(ctx, path.as_ptr());
-        if code != knot_error_KNOT_EOK {
-            eprintln!("{:?}", CStr::from_ptr(knot_strerror(code)));
-        }
+        let ctx = KnotCtx::new();
+        ctx.connect("/run/knot/knot.sock").unwrap();
 
         let mut data: knot_ctl_data_t = std::mem::zeroed();
         let cmd = CString::new("zone-status").unwrap();
         data[knot_ctl_idx_t_KNOT_CTL_IDX_CMD as usize] = cmd.as_ptr();
-        let code = knot_ctl_send(
-            ctx,
-            knot_ctl_type_t_KNOT_CTL_TYPE_DATA,
-            &mut data as &mut knot_ctl_data_t,
-        );
-        if code != knot_error_KNOT_EOK {
-            eprintln!("{:?}", CStr::from_ptr(knot_strerror(code)));
-        }
-
-        let code = knot_ctl_send(
-            ctx,
+        ctx.send(knot_ctl_type_t_KNOT_CTL_TYPE_DATA, &mut data)
+            .unwrap();
+        ctx.send(
             knot_ctl_type_t_KNOT_CTL_TYPE_BLOCK,
             0 as *mut knot_ctl_data_t,
-        );
-        if code != knot_error_KNOT_EOK {
-            eprintln!("{:?}", CStr::from_ptr(knot_strerror(code)));
-        }
+        )
+        .unwrap();
 
         let registry = prometheus::Registry::new();
 
         loop {
             let mut data: knot_ctl_data_t = std::mem::zeroed();
             let mut data_type: knot_ctl_type_t = std::mem::zeroed();
-            let code = knot_ctl_receive(
-                ctx,
-                &mut data_type,
-                data.as_mut_ptr() as *mut knot_ctl_data_t,
-            );
-            if code != knot_error_KNOT_EOK {
-                eprintln!("{:?}", CStr::from_ptr(knot_strerror(code)));
-            }
+            ctx.recv(&mut data_type, &mut data).unwrap();
 
             match data_type {
                 knot_ctl_type_t_KNOT_CTL_TYPE_BLOCK => break,
@@ -118,8 +96,5 @@ fn main() {
         let metric_families = registry.gather();
         encoder.encode_utf8(&metric_families, &mut buffer).unwrap();
         println!("{}", buffer);
-
-        knot_ctl_close(ctx);
-        knot_ctl_free(ctx);
     }
 }

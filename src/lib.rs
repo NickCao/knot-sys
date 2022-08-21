@@ -8,7 +8,7 @@ use std::ffi::{CStr, CString, NulError};
 use std::os::raw::c_int;
 use thiserror::Error;
 
-pub struct Ctx {
+pub struct KnotCtx {
     ctx: *mut knot_ctl_t,
 }
 
@@ -29,21 +29,36 @@ fn knot_result(value: c_int) -> KnotResult<()> {
     }
 }
 
-impl Ctx {
-    pub fn connect(path: &str) -> KnotResult<Self> {
+impl KnotCtx {
+    pub fn new() -> Self {
         unsafe {
-            let ctx = knot_ctl_alloc();
-            let path = CString::new(path)?;
-            knot_result(knot_ctl_connect(ctx, path.as_ptr()))?;
-            Ok(Self { ctx })
+            Self {
+                ctx: knot_ctl_alloc(),
+            }
         }
+    }
+    pub fn connect(&self, path: &str) -> KnotResult<()> {
+        unsafe {
+            let path = CString::new(path)?;
+            knot_result(knot_ctl_connect(self.ctx, path.as_ptr()))
+        }
+    }
+    pub fn close(&self) {
+        unsafe {
+            knot_ctl_close(self.ctx);
+        }
+    }
+    pub fn send(&self, r#type: knot_ctl_type_t, data: *mut knot_ctl_data_t) -> KnotResult<()> {
+        unsafe { knot_result(knot_ctl_send(self.ctx, r#type, data)) }
+    }
+    pub fn recv(&self, r#type: &mut knot_ctl_type_t, data: *mut knot_ctl_data_t) -> KnotResult<()> {
+        unsafe { knot_result(knot_ctl_receive(self.ctx, r#type, data)) }
     }
 }
 
-impl Drop for Ctx {
+impl Drop for KnotCtx {
     fn drop(&mut self) {
         unsafe {
-            knot_ctl_close(self.ctx);
             knot_ctl_free(self.ctx);
         }
     }

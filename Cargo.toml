@@ -13,3 +13,6 @@ argh = "0.1.8"
 
 [build-dependencies]
 bindgen = "0.60.1"
+
+[profile.release]
+opt-level = 1

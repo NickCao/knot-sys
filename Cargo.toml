@@ -7,6 +7,8 @@ edition = "2021"
 nom = "7"
 prometheus = "0.13.1"
 thiserror = "1.0"
+tide = "0.14.0"
+async-std = { version = "1.6.0", features = ["attributes"] }
 
 [build-dependencies]
 bindgen = "0.60.1"

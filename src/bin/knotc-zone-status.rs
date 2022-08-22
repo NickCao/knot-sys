@@ -24,63 +24,73 @@ fn parse(value: &str) -> i64 {
     -1
 }
 
-fn main() {
-    let ctx = KnotCtx::new();
-    ctx.connect("/run/knot/knot.sock").unwrap();
-    ctx.send(
-        KnotCtlType::DATA,
-        Some(&KnotCtlData::from([(
-            KnotCtlIdx::CMD,
-            CString::new("zone-status").unwrap(),
-        )])),
-    )
-    .unwrap();
-    ctx.send(KnotCtlType::BLOCK, None).unwrap();
+async fn metrics(_req: tide::Request<()>) -> tide::Result {
+    let buffer = async_std::task::spawn_blocking(|| {
+        let ctx = KnotCtx::new();
+        ctx.connect("/run/knot/knot.sock").unwrap();
+        ctx.send(
+            KnotCtlType::DATA,
+            Some(&KnotCtlData::from([(
+                KnotCtlIdx::CMD,
+                CString::new("zone-status").unwrap(),
+            )])),
+        )
+        .unwrap();
+        ctx.send(KnotCtlType::BLOCK, None).unwrap();
 
-    let registry = prometheus::Registry::new();
+        let registry = prometheus::Registry::new();
 
-    loop {
-        let (data_type, mut data) = ctx.recv().unwrap();
+        loop {
+            let (data_type, mut data) = ctx.recv().unwrap();
 
-        match data_type {
-            KnotCtlType::BLOCK => break,
-            KnotCtlType::DATA | KnotCtlType::EXTRA => {
-                let zone = data
-                    .remove(&KnotCtlIdx::ZONE)
-                    .unwrap()
-                    .into_string()
+            match data_type {
+                KnotCtlType::BLOCK => break,
+                KnotCtlType::DATA | KnotCtlType::EXTRA => {
+                    let zone = data
+                        .remove(&KnotCtlIdx::ZONE)
+                        .unwrap()
+                        .into_string()
+                        .unwrap();
+                    let label = data
+                        .remove(&KnotCtlIdx::TYPE)
+                        .unwrap()
+                        .into_string()
+                        .unwrap();
+                    let value = data
+                        .remove(&KnotCtlIdx::DATA)
+                        .unwrap()
+                        .into_string()
+                        .unwrap();
+
+                    let gauge = prometheus::IntGauge::with_opts(prometheus::Opts {
+                        namespace: "knot".to_string(),
+                        subsystem: "dns".to_string(),
+                        name: normalize(&label),
+                        help: label,
+                        const_labels: HashMap::from([("zone".to_string(), zone)]),
+                        variable_labels: vec![],
+                    })
                     .unwrap();
-                let label = data
-                    .remove(&KnotCtlIdx::TYPE)
-                    .unwrap()
-                    .into_string()
-                    .unwrap();
-                let value = data
-                    .remove(&KnotCtlIdx::DATA)
-                    .unwrap()
-                    .into_string()
-                    .unwrap();
+                    gauge.set(parse(&value));
 
-                let gauge = prometheus::IntGauge::with_opts(prometheus::Opts {
-                    namespace: "knot".to_string(),
-                    subsystem: "dns".to_string(),
-                    name: normalize(&label),
-                    help: label,
-                    const_labels: HashMap::from([("zone".to_string(), zone)]),
-                    variable_labels: vec![],
-                })
-                .unwrap();
-                gauge.set(parse(&value));
-
-                registry.register(Box::new(gauge)).unwrap();
+                    registry.register(Box::new(gauge)).unwrap();
+                }
+                _ => unreachable!(),
             }
-            _ => unimplemented!(),
         }
-    }
 
-    let mut buffer = String::new();
-    let encoder = prometheus::TextEncoder::new();
-    let metric_families = registry.gather();
-    encoder.encode_utf8(&metric_families, &mut buffer).unwrap();
-    println!("{}", buffer);
+        prometheus::TextEncoder::new()
+            .encode_to_string(&registry.gather())
+            .unwrap()
+    })
+    .await;
+    Ok(buffer.into())
+}
+
+#[async_std::main]
+async fn main() -> tide::Result<()> {
+    let mut app = tide::new();
+    app.at("metrics").get(metrics);
+    app.listen("0.0.0.0:18080").await?;
+    Ok(())
 }

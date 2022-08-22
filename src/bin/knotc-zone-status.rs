@@ -1,5 +1,3 @@
-#![allow(non_upper_case_globals)]
-
 use knot_sys::*;
 use std::collections::HashMap;
 use std::ffi::CString;
@@ -25,65 +23,53 @@ fn parse(value: &str) -> i64 {
 }
 
 async fn metrics(_req: tide::Request<()>) -> tide::Result {
-    let buffer = async_std::task::spawn_blocking(|| {
-        let ctx = KnotCtx::new();
-        ctx.connect("/run/knot/knot.sock").unwrap();
-        ctx.send(
-            KnotCtlType::DATA,
-            Some(&KnotCtlData::from([(
-                KnotCtlIdx::CMD,
-                CString::new("zone-status").unwrap(),
-            )])),
-        )
-        .unwrap();
-        ctx.send(KnotCtlType::BLOCK, None).unwrap();
+    let buffer = async_std::task::spawn_blocking(
+        || -> Result<_, Box<dyn std::error::Error + Send + Sync>> {
+            let ctx = KnotCtx::new();
+            ctx.connect("/run/knot/knot.sock")?;
 
-        let registry = prometheus::Registry::new();
+            ctx.send(
+                KnotCtlType::DATA,
+                Some(&KnotCtlData::from([(
+                    KnotCtlIdx::CMD,
+                    CString::new("zone-status")?,
+                )])),
+            )?;
+            ctx.send(KnotCtlType::BLOCK, None)?;
 
-        loop {
-            let (data_type, mut data) = ctx.recv().unwrap();
+            let registry = prometheus::Registry::new();
 
-            match data_type {
-                KnotCtlType::BLOCK => break,
-                KnotCtlType::DATA | KnotCtlType::EXTRA => {
-                    let zone = data
-                        .remove(&KnotCtlIdx::ZONE)
-                        .unwrap()
-                        .into_string()
-                        .unwrap();
-                    let label = data
-                        .remove(&KnotCtlIdx::TYPE)
-                        .unwrap()
-                        .into_string()
-                        .unwrap();
-                    let value = data
-                        .remove(&KnotCtlIdx::DATA)
-                        .unwrap()
-                        .into_string()
-                        .unwrap();
+            loop {
+                let (data_type, mut data) = ctx.recv()?;
 
-                    let gauge = prometheus::IntGauge::with_opts(prometheus::Opts {
-                        namespace: "knot".to_string(),
-                        subsystem: "dns".to_string(),
-                        name: normalize(&label),
-                        help: label,
-                        const_labels: HashMap::from([("zone".to_string(), zone)]),
-                        variable_labels: vec![],
-                    })
-                    .unwrap();
-                    gauge.set(parse(&value));
+                match data_type {
+                    KnotCtlType::BLOCK => break,
+                    KnotCtlType::DATA | KnotCtlType::EXTRA => {
+                        let zone = data.remove(&KnotCtlIdx::ZONE).unwrap().into_string()?;
+                        let label = data.remove(&KnotCtlIdx::TYPE).unwrap().into_string()?;
+                        let value = data.remove(&KnotCtlIdx::DATA).unwrap().into_string()?;
 
-                    registry.register(Box::new(gauge)).unwrap();
+                        let gauge = prometheus::IntGauge::with_opts(prometheus::Opts {
+                            namespace: "knot".to_string(),
+                            subsystem: "dns".to_string(),
+                            name: normalize(&label),
+                            help: label,
+                            const_labels: HashMap::from([("zone".to_string(), zone)]),
+                            variable_labels: vec![],
+                        })?;
+                        gauge.set(parse(&value));
+
+                        registry.register(Box::new(gauge))?;
+                    }
+                    _ => unreachable!(),
                 }
-                _ => unreachable!(),
             }
-        }
 
-        prometheus::TextEncoder::new()
-            .encode_to_string(&registry.gather())
-            .unwrap()
-    })
-    .await;
+            Ok(prometheus::TextEncoder::new().encode_to_string(&registry.gather())?)
+        },
+    )
+    .await
+    .unwrap();
     Ok(buffer.into())
 }
 

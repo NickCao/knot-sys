@@ -1,3 +1,4 @@
+use argh::FromArgs;
 use knot_sys::*;
 use std::collections::HashMap;
 use std::ffi::CString;
@@ -22,11 +23,12 @@ fn parse(value: &str) -> i64 {
     -1
 }
 
-async fn metrics(_req: tide::Request<()>) -> tide::Result {
+async fn metrics(req: tide::Request<Args>) -> tide::Result {
+    let socket = req.state().socket.clone();
     let buffer = async_std::task::spawn_blocking(
-        || -> Result<_, Box<dyn std::error::Error + Send + Sync>> {
+        move || -> Result<_, Box<dyn std::error::Error + Send + Sync>> {
             let ctx = KnotCtx::new();
-            ctx.connect("/run/knot/knot.sock")?;
+            ctx.connect(&socket)?;
             ctx.send(
                 KnotCtlType::DATA,
                 Some(&KnotCtlData::from([(
@@ -66,10 +68,22 @@ async fn metrics(_req: tide::Request<()>) -> tide::Result {
     Ok(buffer.into())
 }
 
+#[derive(FromArgs, Clone)]
+/// Reach new heights.
+struct Args {
+    /// knotd control socket path
+    #[argh(option, short = 's', default = "String::from(\"/run/knot/knot.sock\")")]
+    socket: String,
+    /// listen address
+    #[argh(option, short = 'l')]
+    listen: String,
+}
+
 #[async_std::main]
 async fn main() -> tide::Result<()> {
-    let mut app = tide::new();
+    let args: Args = argh::from_env();
+    let mut app = tide::with_state(args.clone());
     app.at("metrics").get(metrics);
-    app.listen("0.0.0.0:18080").await?;
+    app.listen(args.listen).await?;
     Ok(())
 }

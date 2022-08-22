@@ -4,9 +4,9 @@ use std::ffi::CString;
 
 fn normalize(key: &str) -> String {
     key.to_lowercase()
-        .replace(" ", "_")
-        .replace("/", "_")
-        .replace("-", "_")
+        .replace(' ', "_")
+        .replace('/', "_")
+        .replace('-', "_")
 }
 
 fn parse(value: &str) -> i64 {
@@ -27,7 +27,6 @@ async fn metrics(_req: tide::Request<()>) -> tide::Result {
         || -> Result<_, Box<dyn std::error::Error + Send + Sync>> {
             let ctx = KnotCtx::new();
             ctx.connect("/run/knot/knot.sock")?;
-
             ctx.send(
                 KnotCtlType::DATA,
                 Some(&KnotCtlData::from([(
@@ -36,19 +35,15 @@ async fn metrics(_req: tide::Request<()>) -> tide::Result {
                 )])),
             )?;
             ctx.send(KnotCtlType::BLOCK, None)?;
-
             let registry = prometheus::Registry::new();
-
             loop {
-                let (data_type, mut data) = ctx.recv()?;
-
+                let (data_type, data) = ctx.recv()?;
                 match data_type {
                     KnotCtlType::BLOCK => break,
                     KnotCtlType::DATA | KnotCtlType::EXTRA => {
-                        let zone = data.remove(&KnotCtlIdx::ZONE).unwrap().into_string()?;
-                        let label = data.remove(&KnotCtlIdx::TYPE).unwrap().into_string()?;
-                        let value = data.remove(&KnotCtlIdx::DATA).unwrap().into_string()?;
-
+                        let zone = data.get(&KnotCtlIdx::ZONE).unwrap().clone().into_string()?;
+                        let label = data.get(&KnotCtlIdx::TYPE).unwrap().clone().into_string()?;
+                        let value = data.get(&KnotCtlIdx::DATA).unwrap().clone().into_string()?;
                         let gauge = prometheus::IntGauge::with_opts(prometheus::Opts {
                             namespace: "knot".to_string(),
                             subsystem: "dns".to_string(),
@@ -58,13 +53,11 @@ async fn metrics(_req: tide::Request<()>) -> tide::Result {
                             variable_labels: vec![],
                         })?;
                         gauge.set(parse(&value));
-
                         registry.register(Box::new(gauge))?;
                     }
                     _ => unreachable!(),
                 }
             }
-
             Ok(prometheus::TextEncoder::new().encode_to_string(&registry.gather())?)
         },
     )

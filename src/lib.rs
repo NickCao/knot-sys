@@ -78,21 +78,20 @@ impl KnotCtx {
         }
     }
     pub fn send(&self, r#type: KnotCtlType, data: Option<&KnotCtlData>) -> KnotResult<()> {
-        let data = data.map(|data| {
-            let mut packet = [std::ptr::null(); knot_ctl_idx_t_KNOT_CTL_IDX__COUNT as usize];
-            data.iter().for_each(|(&k, v)| {
-                packet[k as usize] = v.as_ptr();
-            });
-            packet
-        });
+        let data = match data {
+            Some(data) => {
+                let mut packet = [std::ptr::null(); knot_ctl_idx_t_KNOT_CTL_IDX__COUNT as usize];
+                data.iter()
+                    .for_each(|(&k, v)| packet[k as usize] = v.as_ptr());
+                packet.as_mut_ptr()
+            }
+            None => std::ptr::null_mut(),
+        };
         unsafe {
             knot_result(knot_ctl_send(
                 self.ctx,
                 r#type as knot_ctl_type_t,
-                match data {
-                    Some(mut data) => data.as_mut_ptr() as *mut knot_ctl_data_t,
-                    None => std::ptr::null_mut::<knot_ctl_data_t>(),
-                },
+                data as *mut knot_ctl_data_t,
             ))
         }
     }
